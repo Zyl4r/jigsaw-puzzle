@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quebra-Cabeça</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            background-color: #f0f0f0;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        #game-container {
+            position: relative;
+            width: 100%;
+            max-width: 1200px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        #tabuleiro {
+            position: relative;
+            /* Tamanho base do tabuleiro, será ajustado via JS */
+            width: 400px;
+            height: 400px;
+            border: 2px solid black;
+            font-size: 0;
+            line-height: 0;
+            box-sizing: content-box;
+        }
+
+        .peca {
+            position: absolute;
+            /* Tamanho base das peças, será ajustado via JS */
+            width: 100px;
+            height: 100px;
+            background-size: 400px 400px; /* Será ajustado via JS */
+            cursor: grab;
+            margin: 0;
+            padding: 0;
+            border: none;
+            outline: none;
+            pointer-events: auto;
+            -webkit-user-drag: none;
+        }
+
+        .encaixada {
+            cursor: default;
+            z-index: 1;
+        }
+
+        #imagem-referencia {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            border: 2px solid #333;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            -webkit-user-drag: none;
+            pointer-events: none;
+            max-width: 30vw; /* Limita a largura máxima em telas pequenas */
+            max-height: 30vh; /* Limita a altura máxima em telas pequenas */
+        }
+
+        /* Regras para telas menores */
+        @media (max-width: 768px) {
+            #imagem-referencia {
+                max-width: 25vw;
+                max-height: 25vh;
+                top: 10px;
+                right: 10px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            #imagem-referencia {
+                max-width: 20vw;
+                max-height: 20vh;
+                top: 5px;
+                right: 5px;
+            }
+        }
+
+        /* Estilo para a mensagem de parabéns */
+        #mensagem-vitoria {
+            display: none; /* Inicialmente escondido */
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            z-index: 2000;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            color: white;
+            text-align: center;
+            animation: fadeIn 0.5s ease-in-out;
+        }
+
+        #conteudo-vitoria {
+            background-color: #2ecc71;
+            padding: 30px 50px;
+            border-radius: 15px;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.3);
+            max-width: 80%;
+            animation: scaleIn 0.5s ease-out;
+        }
+
+        #mensagem-vitoria h2 {
+            font-size: 2.5rem;
+            margin-bottom: 15px;
+            color: #fff;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        #mensagem-vitoria p {
+            font-size: 1.2rem;
+            margin-bottom: 20px;
+        }
+
+        #mensagem-vitoria button {
+            background-color: #fff;
+            color: #2ecc71;
+            border: none;
+            padding: 10px 20px;
+            font-size: 1.1rem;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-weight: bold;
+        }
+
+        #mensagem-vitoria button:hover {
+            background-color: #f0f0f0;
+            transform: scale(1.05);
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes scaleIn {
+            from { transform: scale(0.8); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+
+        @keyframes confetti {
+            0% { transform: translateY(0) rotate(0); opacity: 1; }
+            100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
+        }
+
+        .confetti {
+            position: fixed;
+            width: 10px;
+            height: 10px;
+            background-color: #f00;
+            opacity: 0;
+            z-index: 1999;
+            animation: confetti 5s ease-in-out forwards;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="game-container">
+        <div id="tabuleiro"></div>
+    </div>
+
+    <!-- Mensagem de vitória que será exibida ao completar o quebra-cabeça -->
+    <div id="mensagem-vitoria">
+        <div id="conteudo-vitoria">
+            <h2>Parabéns!</h2>
+            <p>Você completou o quebra-cabeça com sucesso!</p>
+            <button id="btn-novo-jogo">Jogar Novamente</button>
+        </div>
+    </div>
+
+    <script>
+        // Configurações base
+        let numPecas = 16;
+        let numColunas = 4;
+        let numLinhas = 4;
+        let tabuleiroBaseWidth = 400;
+        let tabuleiroBaseHeight = 400;
+        let tamanhoPecaBase = 100;
+        let jogoCompleto = false;
+
+        // Elementos
+        const tabuleiro = document.getElementById("tabuleiro");
+        const gameContainer = document.getElementById("game-container");
+        const imagemFundo = "https://i.scdn.co/image/ab67616d00001e0223d3eec89fbadef7adfc4262";
+        const mensagemVitoria = document.getElementById("mensagem-vitoria");
+        const btnNovoJogo = document.getElementById("btn-novo-jogo");
+
+        // Áudio de vitória
+        const audioVitoria = new Audio("audios/victory.mp3");
+        // Se o link acima não funcionar, você pode substituir por outro ou hospedar o áudio em outro lugar
+
+        // Variáveis globais para tamanhos atuais
+        let tabuleiroWidth = tabuleiroBaseWidth;
+        let tabuleiroHeight = tabuleiroBaseHeight;
+        let tamanhoPeca = tamanhoPecaBase;
+        let pecas = [];
+        let ultimoTamanhoJanela = { width: window.innerWidth, height: window.innerHeight };
+
+        // Impedir comportamento padrão de arrastar imagens
+        window.addEventListener('dragstart', function(e) {
+            e.preventDefault();
+        });
+
+        // Impedir comportamento de seleção
+        window.addEventListener('selectstart', function(e) {
+            e.preventDefault();
+        });
+
+        // Configurar botão de novo jogo
+        btnNovoJogo.addEventListener('click', function() {
+            location.reload(); // Recarrega a página para iniciar um novo jogo
+        });
+
+        // Função para verificar se o quebra-cabeça está completo
+        function verificarVitoria() {
+            // Se o jogo já foi completado, não verificamos novamente
+            if (jogoCompleto) return false;
+            
+            // Verifica se todas as peças estão encaixadas
+            const todasEncaixadas = pecas.every(peca => peca.classList.contains('encaixada'));
+            
+            if (todasEncaixadas) {
+                jogoCompleto = true;
+                setTimeout(() => {
+                    // Toca o som de vitória
+                    audioVitoria.play().catch(e => console.log("Erro ao tocar áudio:", e));
+                    
+                    // Exibe a mensagem de parabéns
+                    mensagemVitoria.style.display = "flex";
+                    
+                    // Cria efeito de confete
+                    criarConfete();
+                }, 500);
+                
+                return true;
+            }
+            
+            return false;
+        }
+
+        // Função para criar efeito de confete
+        function criarConfete() {
+            const cores = ['#f00', '#0f0', '#00f', '#ff0', '#0ff', '#f0f', '#fb0', '#f0b'];
+            
+            for (let i = 0; i < 100; i++) {
+                setTimeout(() => {
+                    const confete = document.createElement('div');
+                    confete.classList.add('confetti');
+                    confete.style.left = `${Math.random() * 100}vw`;
+                    confete.style.top = `-10px`;
+                    confete.style.backgroundColor = cores[Math.floor(Math.random() * cores.length)];
+                    confete.style.width = `${Math.random() * 10 + 5}px`;
+                    confete.style.height = `${Math.random() * 10 + 5}px`;
+                    confete.style.borderRadius = Math.random() > 0.5 ? '50%' : '0';
+                    confete.style.animationDuration = `${Math.random() * 3 + 2}s`;
+                    
+                    document.body.appendChild(confete);
+                    
+                    // Remove o confete após a animação terminar
+                    setTimeout(() => {
+                        confete.remove();
+                    }, 5000);
+                }, i * 20);
+            }
+        }
+
+        // Função para calcular tamanho responsivo do tabuleiro
+        function calcularTamanhoResponsivo() {
+            // Para telas menores, vamos diminuir o tabuleiro
+            const larguraJanela = window.innerWidth;
+            const alturaJanela = window.innerHeight;
+            const margemSeguranca = 40; // Margem para bordas e elementos UI
+            
+            // Determine o tamanho máximo possível para o tabuleiro
+            let novaLargura = tabuleiroBaseWidth;
+            let novaAltura = tabuleiroBaseHeight;
+            
+            if (larguraJanela < tabuleiroBaseWidth + 100) {
+                // Para telas estreitas, ajustamos para 80% da largura disponível
+                novaLargura = Math.floor((larguraJanela - margemSeguranca) * 0.8);
+                // Mantém proporção quadrada
+                novaAltura = novaLargura;
+            }
+            
+            if (alturaJanela < tabuleiroBaseHeight + 100) {
+                // Se a altura também for limitante, ajustamos baseado na menor dimensão
+                const alturaPotencial = Math.floor((alturaJanela - margemSeguranca) * 0.8);
+                if (alturaPotencial < novaLargura) {
+                    novaLargura = alturaPotencial;
+                    novaAltura = alturaPotencial;
+                }
+            }
+            
+            // Atualizamos as variáveis globais
+            tabuleiroWidth = novaLargura;
+            tabuleiroHeight = novaAltura;
+            tamanhoPeca = Math.floor(novaLargura / numColunas);
+            
+            return {
+                tabuleiroWidth,
+                tabuleiroHeight,
+                tamanhoPeca
+            };
+        }
+
+        // Função para verificar se um elemento está parcialmente ou totalmente fora da tela
+        function isElementOutOfViewport(element) {
+            const rect = element.getBoundingClientRect();
+            return (
+                rect.left < 0 ||
+                rect.top < 0 ||
+                rect.right > window.innerWidth ||
+                rect.bottom > window.innerHeight ||
+                rect.width === 0 ||
+                rect.height === 0
+            );
+        }
+
+        // Aplicar dimensões responsivas aos elementos
+        function aplicarDimensoesResponsivas() {
+            const { tabuleiroWidth, tabuleiroHeight, tamanhoPeca } = calcularTamanhoResponsivo();
+            
+            // Atualiza o tabuleiro
+            tabuleiro.style.width = `${tabuleiroWidth}px`;
+            tabuleiro.style.height = `${tabuleiroHeight}px`;
+            
+            // Registra se houve mudança significativa de tamanho
+            const mudancaSignificativa = 
+                Math.abs(window.innerWidth - ultimoTamanhoJanela.width) > 50 ||
+                Math.abs(window.innerHeight - ultimoTamanhoJanela.height) > 50;
+            
+            // Atualiza todas as peças
+            pecas.forEach((peca, index) => {
+                const row = parseInt(peca.dataset.row);
+                const col = parseInt(peca.dataset.col);
+                
+                // Salva a posição atual da peça antes de modificá-la
+                const posicaoAnterior = {
+                    left: parseFloat(peca.style.left),
+                    top: parseFloat(peca.style.top)
+                };
+                
+                // Atualiza tamanho e posição da peça
+                peca.style.width = `${tamanhoPeca}px`;
+                peca.style.height = `${tamanhoPeca}px`;
+                peca.style.backgroundSize = `${tabuleiroWidth}px ${tabuleiroHeight}px`;
+                peca.style.backgroundPosition = `-${col * tamanhoPeca}px -${row * tamanhoPeca}px`;
+                
+                // Se a peça já estiver encaixada, atualiza sua posição no tabuleiro
+                if (peca.classList.contains('encaixada')) {
+                    const tabuleiroPos = getExactPosition(tabuleiro);
+                    const borderWidth = 2;
+                    peca.style.left = `${tabuleiroPos.left + borderWidth + (col * tamanhoPeca)}px`;
+                    peca.style.top = `${tabuleiroPos.top + borderWidth + (row * tamanhoPeca)}px`;
+                }
+                // Se a peça estiver fora da tela OU houve uma mudança significativa no tamanho da janela
+                else if (isElementOutOfViewport(peca) || mudancaSignificativa) {
+                    // Reposiciona a peça em lugar visível, mas não no tabuleiro
+                    const tabuleiroPos = getExactPosition(tabuleiro);
+                    let posX, posY;
+                    
+                    // Tenta manter a posição relativa se possível
+                    if (!isElementOutOfViewport(peca) && !mudancaSignificativa) {
+                        posX = posicaoAnterior.left;
+                        posY = posicaoAnterior.top;
+                    } else {
+                        // Caso contrário, posiciona aleatoriamente
+                        const margemSeguranca = 20;
+                        
+                        // Garante que as peças não fiquem fora da tela
+                        const maxX = window.innerWidth - tamanhoPeca - margemSeguranca;
+                        const maxY = window.innerHeight - tamanhoPeca - margemSeguranca;
+                        
+                        do {
+                            posX = Math.random() * maxX + margemSeguranca;
+                            posY = Math.random() * maxY + margemSeguranca;
+                        } while (
+                            posX > tabuleiroPos.left - tamanhoPeca &&
+                            posX < tabuleiroPos.left + tabuleiroPos.width &&
+                            posY > tabuleiroPos.top - tamanhoPeca &&
+                            posY < tabuleiroPos.top + tabuleiroPos.height
+                        );
+                    }
+
+                    peca.style.left = `${posX}px`;
+                    peca.style.top = `${posY}px`;
+                }
+            });
+            
+            // Atualiza imagem de referência para manter proporção quadrada
+            const img = document.getElementById('imagem-referencia');
+            if (img) {
+                // Mantém proporção quadrada para a imagem de referência
+                const tamanhoReferencia = Math.min(
+                    Math.max(tabuleiroWidth * 0.3, 100),
+                    Math.min(window.innerWidth * 0.25, window.innerHeight * 0.25)
+                );
+                
+                img.style.width = `${tamanhoReferencia}px`;
+                img.style.height = `${tamanhoReferencia}px`;
+                img.style.objectFit = "cover"; // Mantém a imagem coberta corretamente
+            }
+            
+            // Atualiza o registro do último tamanho de janela
+            ultimoTamanhoJanela = { 
+                width: window.innerWidth, 
+                height: window.innerHeight 
+            };
+        }
+
+        // Criar imagem de referência
+        function criarImagemReferencia() {
+            const img = document.createElement("img");
+            img.id = "imagem-referencia";
+            img.src = imagemFundo;
+            
+            // O tamanho será definido em aplicarDimensoesResponsivas
+            img.style.objectFit = "cover";
+            
+            // Impedir comportamento de arrasto de imagem
+            img.draggable = false;
+            img.addEventListener('dragstart', function(e) {
+                e.preventDefault();
+                return false;
+            });
+            
+            document.body.appendChild(img);
+        }
+
+        // Função para obter a posição exata
+        function getExactPosition(element) {
+            const rect = element.getBoundingClientRect();
+            return {
+                left: rect.left,
+                top: rect.top,
+                width: rect.width,
+                height: rect.height
+            };
+        }
+
+        // Inicializar jogo
+        function iniciarJogo() {
+            // Calcula dimensões responsivas antes de criar as peças
+            calcularTamanhoResponsivo();
+            
+            for (let i = 0; i < numPecas; i++) {
+                const peca = document.createElement("div");
+                peca.classList.add("peca");
+                const row = Math.floor(i / numColunas);
+                const col = i % numColunas;
+
+                peca.style.backgroundImage = `url(${imagemFundo})`;
+                peca.style.width = `${tamanhoPeca}px`;
+                peca.style.height = `${tamanhoPeca}px`;
+                peca.style.backgroundSize = `${tabuleiroWidth}px ${tabuleiroHeight}px`;
+                peca.style.backgroundPosition = `-${col * tamanhoPeca}px -${row * tamanhoPeca}px`;
+
+                // Posiciona as peças aleatoriamente fora do tabuleiro
+                const tabuleiroPos = getExactPosition(tabuleiro);
+                const margemSeguranca = 20;
+                
+                // Garante que as peças não fiquem fora da tela
+                const maxX = window.innerWidth - tamanhoPeca - margemSeguranca;
+                const maxY = window.innerHeight - tamanhoPeca - margemSeguranca;
+                
+                let posX, posY;
+                do {
+                    posX = Math.random() * maxX + margemSeguranca;
+                    posY = Math.random() * maxY + margemSeguranca;
+                } while (
+                    posX > tabuleiroPos.left - tamanhoPeca &&
+                    posX < tabuleiroPos.left + tabuleiroPos.width &&
+                    posY > tabuleiroPos.top - tamanhoPeca &&
+                    posY < tabuleiroPos.top + tabuleiroPos.height
+                );
+
+                peca.style.left = `${posX}px`;
+                peca.style.top = `${posY}px`;
+
+                peca.dataset.row = row;
+                peca.dataset.col = col;
+
+                // Impedir comportamento padrão de arrastar
+                peca.draggable = false;
+
+                function dragStart(e) {
+                    // Prevenir comportamento padrão
+                    e.preventDefault();
+                    
+                    // Não arrasta se já estiver encaixada
+                    if (peca.classList.contains('encaixada')) return;
+                    
+                    const offsetX = e.clientX - peca.getBoundingClientRect().left;
+                    const offsetY = e.clientY - peca.getBoundingClientRect().top;
+                    peca.style.zIndex = 1000;
+
+                    function moveMouse(ev) {
+                        peca.style.left = `${ev.clientX - offsetX}px`;
+                        peca.style.top = `${ev.clientY - offsetY}px`;
+                    }
+
+                    function dropMouse() {
+                        document.removeEventListener("mousemove", moveMouse);
+                        document.removeEventListener("mouseup", dropMouse);
+
+                        // Obter posição exata do tabuleiro (pode ter mudado)
+                        const tabuleiroPos = getExactPosition(tabuleiro);
+                        
+                        // Cálculo preciso da posição esperada
+                        const borderWidth = 2;
+                        const expectedLeft = tabuleiroPos.left + borderWidth + (col * tamanhoPeca);
+                        const expectedTop = tabuleiroPos.top + borderWidth + (row * tamanhoPeca);
+                        const currentLeft = peca.getBoundingClientRect().left;
+                        const currentTop = peca.getBoundingClientRect().top;
+
+                        // Se a peça estiver perto do local correto, encaixa certinho
+                        if (Math.abs(currentLeft - expectedLeft) < tamanhoPeca/2 && 
+                            Math.abs(currentTop - expectedTop) < tamanhoPeca/2) {
+                            // Posicionamento exato
+                            peca.style.left = `${expectedLeft}px`;
+                            peca.style.top = `${expectedTop}px`;
+                            
+                            // Marca como encaixada
+                            peca.classList.add('encaixada');
+                            
+                            // Verifica se completou o quebra-cabeça
+                            verificarVitoria();
+                        }
+                        
+                        peca.style.zIndex = "1";
+                    }
+
+                    document.addEventListener("mousemove", moveMouse);
+                    document.addEventListener("mouseup", dropMouse);
+                }
+
+                peca.addEventListener("mousedown", dragStart);
+                document.body.appendChild(peca);
+                pecas.push(peca);
+            }
+        }
+
+        // Pré-carrega o áudio de vitória para evitar atraso ao tocar
+        function precarregarAudio() {
+            audioVitoria.load();
+            // Força o pré-carregamento com um volume baixo e depois pausa
+            audioVitoria.volume = 0.01;
+            audioVitoria.play().then(() => {
+                audioVitoria.pause();
+                audioVitoria.currentTime = 0;
+                audioVitoria.volume = 1.0;
+            }).catch(e => {
+                console.log("Aviso: Não foi possível pré-carregar o áudio. Pode haver um pequeno atraso na primeira reprodução.");
+            });
+        }
+
+        // Esperamos a imagem carregar para iniciar
+        const preloadImage = new Image();
+        preloadImage.src = imagemFundo;
+        preloadImage.onload = function() {
+            criarImagemReferencia();
+            iniciarJogo();
+            aplicarDimensoesResponsivas();
+            precarregarAudio();
+        };
+
+        // Adiciona um pequeno atraso ao redimensionamento para evitar múltiplas chamadas
+        let resizeTimeout;
+        window.addEventListener('resize', function() {
+            clearTimeout(resizeTimeout);
+            resizeTimeout = setTimeout(function() {
+                aplicarDimensoesResponsivas();
+            }, 100); // Espera 100ms após o último evento resize
+        });
+    </script>
+</body>
+
+</html>
